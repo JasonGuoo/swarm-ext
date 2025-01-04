@@ -38,6 +38,7 @@ class Swarm:
         stream: bool,
         debug: bool,
         extra_completion_params: dict = {},
+        debug_request: bool = False,
     ) -> ChatCompletionMessage:
         """Get a chat completion from the OpenAI API.
 
@@ -131,7 +132,8 @@ class Swarm:
 
         if tools:
             create_params["parallel_tool_calls"] = agent.parallel_tool_calls
-
+        if debug_request:
+            debug_print(debug, f"## {agent.name} send request to LLM with params: {create_params}")
         return self.client.chat.completions.create(**create_params)
 
     def handle_function_result(self, result, debug) -> Result:
@@ -210,6 +212,7 @@ class Swarm:
         max_turns: int = float("inf"),
         execute_tools: bool = True,
         extra_completion_params: dict = {},
+        debug_request: bool = False,
     ):
         """
         New feature: extra_completion_params
@@ -289,6 +292,7 @@ class Swarm:
                 stream=True,
                 debug=debug,
                 extra_completion_params=extra_completion_params,
+                debug_request=debug_request
             )
 
             yield {"delim": "start"}
@@ -352,6 +356,7 @@ class Swarm:
         max_turns: int = float("inf"),
         execute_tools: bool = True,
         extra_completion_params: dict = {},
+        debug_request: bool = False
     ) -> Response:
         """
         New feature: extra_completion_params
@@ -428,6 +433,7 @@ class Swarm:
                 stream=stream,
                 debug=debug,
                 extra_completion_params=extra_completion_params,
+                debug_request=debug_request
             )
             message = completion.choices[0].message
             debug_print(debug, "Received completion:", message)
