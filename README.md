@@ -357,3 +357,44 @@ run_demo_loop(agent, stream=True)
 - Charu Jaiswal - [charuj](https://github.com/charuj)
 - Colin Jarvis - [colin-openai](https://github.com/colin-openai)
 - Katia Gil Guzman - [katia-openai](https://github.com/katia-openai)
+
+## New Features
+
+### extra_completion_params
+
+The `extra_completion_params` parameter has been added to provide more flexibility when calling OpenAI's chat completion API. This parameter allows you to pass additional parameters directly to the API call.
+
+Example:
+```python
+swarm.run(
+    agent=my_agent,
+    messages=messages,
+    extra_completion_params={
+        "temperature": 0.7,           # Control randomness
+        "max_tokens": 1000,          # Limit response length
+        "presence_penalty": 0.6,     # Encourage new topics
+        "frequency_penalty": 0.6,    # Reduce repetition
+        "response_format": {         # Force JSON output
+            "type": "json_object"
+        },
+        "seed": 123                  # For reproducible results
+    }
+)
+```
+
+Available parameters (see [OpenAI API Reference](https://platform.openai.com/docs/api-reference/chat/create) for details):
+- `temperature`: Controls randomness (0-2)
+- `top_p`: Alternative to temperature (0-1)
+- `n`: Number of completions to generate
+- `max_tokens`: Maximum tokens to generate
+- `presence_penalty`: Penalty for new tokens (-2 to 2)
+- `frequency_penalty`: Penalty for token frequency (-2 to 2)
+- `seed`: For deterministic sampling
+- `response_format`: Specify output format
+- `stop`: Up to 4 sequences where API will stop generating
+
+Note: Protected parameters (`model`, `messages`, `tools`, `tool_choice`, `stream`) cannot be overridden through `extra_completion_params`.
+
+### Breaking Changes
+
+Previous versions of Swarm did not include the `extra_completion_params` parameter, which meant users could not customize these OpenAI API parameters. If you're upgrading from an older version, you can now take advantage of this new functionality to fine-tune the model's behavior.

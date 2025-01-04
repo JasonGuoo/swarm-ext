@@ -37,7 +37,66 @@ class Swarm:
         model_override: str,
         stream: bool,
         debug: bool,
+        extra_completion_params: dict = {},
     ) -> ChatCompletionMessage:
+        """Get a chat completion from the OpenAI API.
+
+        Args:
+            agent (Agent): The agent object.
+            history (List): The history of messages.
+            context_variables (dict): The context variables.
+            model_override (str): The model override.
+            stream (bool): Whether to stream the response.
+            debug (bool): Whether to print debug information.
+            extra_completion_params (dict, optional): Additional parameters to pass to the OpenAI chat completion API. ref:https://platform.openai.com/docs/api-reference/chat/create
+                Common options include:
+                - temperature (float): What sampling temperature to use, between 0 and 2.
+                  Higher values like 0.8 will make the output more random, while lower values
+                  like 0.2 will make it more focused and deterministic.
+                - top_p (float): An alternative to sampling with temperature, called nucleus sampling.
+                  Range is between 0 and 1. We generally recommend altering this or temperature but not both.
+                - n (int): How many chat completion choices to generate for each input message.
+                  Note that the API may return fewer choices if some were flagged.
+                - max_tokens (int): The maximum number of tokens to generate in the chat completion.
+                - presence_penalty (float): Number between -2.0 and 2.0. Positive values penalize new tokens
+                  based on whether they appear in the text so far, increasing the model's likelihood
+                  to talk about new topics.
+                - frequency_penalty (float): Number between -2.0 and 2.0. Positive values penalize new tokens
+                  based on their existing frequency in the text so far, decreasing the model's likelihood
+                  to repeat the same line verbatim.
+                - seed (int): An integer between 0 and 2^32-1 used for deterministic sampling.
+                  When provided along with identical parameters (messages, temperature, etc.),
+                  the API will make a best effort to return the same output. This is useful for:
+                  * Reproducible results in testing
+                  * Consistent behavior across multiple API calls
+                  * A/B testing different prompts with the same randomness
+                  Note: This is a best-effort feature and does not guarantee identical outputs.
+                - response_format (dict): An object specifying the format that the model must output.
+                  Setting to {"type": "json_object"} enables JSON mode, which guarantees the message the
+                  model generates is valid JSON.
+                - stop (string|array): Up to 4 sequences where the API will stop generating further tokens.
+
+                Example:
+                    ```python
+                    swarm.run(
+                        agent=my_agent,
+                        messages=messages,
+                        extra_completion_params={
+                            "temperature": 0.7,           # 适度的随机性
+                            "max_tokens": 1000,          # 限制回复长度
+                            "presence_penalty": 0.6,     # 鼓励谈论新话题
+                            "frequency_penalty": 0.6,    # 减少重复
+                            "response_format": {         # 强制返回JSON格式
+                                "type": "json_object"
+                            },
+                            "seed": 123                  # 确保结果可重现
+                        }
+                    )
+                    ```
+
+        Returns:
+            ChatCompletionMessage: The completion response from the API.
+        """
         context_variables = defaultdict(str, context_variables)
         instructions = (
             agent.instructions(context_variables)
@@ -55,12 +114,19 @@ class Swarm:
             if __CTX_VARS_NAME__ in params["required"]:
                 params["required"].remove(__CTX_VARS_NAME__)
 
+        # 防止关键参数被覆盖
+        protected_keys = {"model", "messages", "tools", "tool_choice", "stream"}
+        filtered_params = {
+            k: v for k, v in extra_completion_params.items() if k not in protected_keys
+        }
+
         create_params = {
             "model": model_override or agent.model,
             "messages": messages,
             "tools": tools or None,
             "tool_choice": agent.tool_choice,
             "stream": stream,
+            **filtered_params,
         }
 
         if tools:
@@ -94,8 +160,7 @@ class Swarm:
         debug: bool,
     ) -> Response:
         function_map = {f.__name__: f for f in functions}
-        partial_response = Response(
-            messages=[], agent=None, context_variables={})
+        partial_response = Response(messages=[], agent=None, context_variables={})
 
         for tool_call in tool_calls:
             name = tool_call.function.name
@@ -112,8 +177,7 @@ class Swarm:
                 )
                 continue
             args = json.loads(tool_call.function.arguments)
-            debug_print(
-                debug, f"Processing tool call: {name} with arguments {args}")
+            debug_print(debug, f"Processing tool call: {name} with arguments {args}")
 
             func = function_map[name]
             # pass context_variables to agent functions
@@ -145,7 +209,56 @@ class Swarm:
         debug: bool = False,
         max_turns: int = float("inf"),
         execute_tools: bool = True,
+        extra_completion_params: dict = {},
     ):
+        """
+        New feature: extra_completion_params
+        extra_completion_params (dict, optional): Additional parameters to pass to the OpenAI chat completion API. ref:https://platform.openai.com/docs/api-reference/chat/create
+                Common options include:
+                - temperature (float): What sampling temperature to use, between 0 and 2.
+                  Higher values like 0.8 will make the output more random, while lower values
+                  like 0.2 will make it more focused and deterministic.
+                - top_p (float): An alternative to sampling with temperature, called nucleus sampling.
+                  Range is between 0 and 1. We generally recommend altering this or temperature but not both.
+                - n (int): How many chat completion choices to generate for each input message.
+                  Note that the API may return fewer choices if some were flagged.
+                - max_tokens (int): The maximum number of tokens to generate in the chat completion.
+                - presence_penalty (float): Number between -2.0 and 2.0. Positive values penalize new tokens
+                  based on whether they appear in the text so far, increasing the model's likelihood
+                  to talk about new topics.
+                - frequency_penalty (float): Number between -2.0 and 2.0. Positive values penalize new tokens
+                  based on their existing frequency in the text so far, decreasing the model's likelihood
+                  to repeat the same line verbatim.
+                - seed (int): An integer between 0 and 2^32-1 used for deterministic sampling.
+                  When provided along with identical parameters (messages, temperature, etc.),
+                  the API will make a best effort to return the same output. This is useful for:
+                  * Reproducible results in testing
+                  * Consistent behavior across multiple API calls
+                  * A/B testing different prompts with the same randomness
+                  Note: This is a best-effort feature and does not guarantee identical outputs.
+                - response_format (dict): An object specifying the format that the model must output.
+                  Setting to {"type": "json_object"} enables JSON mode, which guarantees the message the
+                  model generates is valid JSON.
+                - stop (string|array): Up to 4 sequences where the API will stop generating further tokens.
+
+                Example:
+                    ```python
+                    swarm.run(
+                        agent=my_agent,
+                        messages=messages,
+                        extra_completion_params={
+                            "temperature": 0.7,           # 适度的随机性
+                            "max_tokens": 1000,          # 限制回复长度
+                            "presence_penalty": 0.6,     # 鼓励谈论新话题
+                            "frequency_penalty": 0.6,    # 减少重复
+                            "response_format": {         # 强制返回JSON格式
+                                "type": "json_object"
+                            },
+                            "seed": 123                  # 确保结果可重现
+                        }
+                    )
+                    ```
+        """
         active_agent = agent
         context_variables = copy.deepcopy(context_variables)
         history = copy.deepcopy(messages)
@@ -175,6 +288,7 @@ class Swarm:
                 model_override=model_override,
                 stream=True,
                 debug=debug,
+                extra_completion_params=extra_completion_params,
             )
 
             yield {"delim": "start"}
@@ -188,8 +302,7 @@ class Swarm:
                 merge_chunk(message, delta)
             yield {"delim": "end"}
 
-            message["tool_calls"] = list(
-                message.get("tool_calls", {}).values())
+            message["tool_calls"] = list(message.get("tool_calls", {}).values())
             if not message["tool_calls"]:
                 message["tool_calls"] = None
             debug_print(debug, "Received completion:", message)
@@ -238,7 +351,57 @@ class Swarm:
         debug: bool = False,
         max_turns: int = float("inf"),
         execute_tools: bool = True,
+        extra_completion_params: dict = {},
     ) -> Response:
+        """
+        New feature: extra_completion_params
+        extra_completion_params (dict, optional): Additional parameters to pass to the OpenAI chat completion API. ref:https://platform.openai.com/docs/api-reference/chat/create
+                Common options include:
+                - temperature (float): What sampling temperature to use, between 0 and 2.
+                  Higher values like 0.8 will make the output more random, while lower values
+                  like 0.2 will make it more focused and deterministic.
+                - top_p (float): An alternative to sampling with temperature, called nucleus sampling.
+                  Range is between 0 and 1. We generally recommend altering this or temperature but not both.
+                - n (int): How many chat completion choices to generate for each input message.
+                  Note that the API may return fewer choices if some were flagged.
+                - max_tokens (int): The maximum number of tokens to generate in the chat completion.
+                - presence_penalty (float): Number between -2.0 and 2.0. Positive values penalize new tokens
+                  based on whether they appear in the text so far, increasing the model's likelihood
+                  to talk about new topics.
+                - frequency_penalty (float): Number between -2.0 and 2.0. Positive values penalize new tokens
+                  based on their existing frequency in the text so far, decreasing the model's likelihood
+                  to repeat the same line verbatim.
+                - seed (int): An integer between 0 and 2^32-1 used for deterministic sampling.
+                  When provided along with identical parameters (messages, temperature, etc.),
+                  the API will make a best effort to return the same output. This is useful for:
+                  * Reproducible results in testing
+                  * Consistent behavior across multiple API calls
+                  * A/B testing different prompts with the same randomness
+                  Note: This is a best-effort feature and does not guarantee identical outputs.
+                - response_format (dict): An object specifying the format that the model must output.
+                  Setting to {"type": "json_object"} enables JSON mode, which guarantees the message the
+                  model generates is valid JSON.
+                - stop (string|array): Up to 4 sequences where the API will stop generating further tokens.
+
+                Example:
+                    ```python
+                    swarm.run(
+                        agent=my_agent,
+                        messages=messages,
+                        extra_completion_params={
+                            "temperature": 0.7,           # 适度的随机性
+                            "max_tokens": 1000,          # 限制回复长度
+                            "presence_penalty": 0.6,     # 鼓励谈论新话题
+                            "frequency_penalty": 0.6,    # 减少重复
+                            "response_format": {         # 强制返回JSON格式
+                                "type": "json_object"
+                            },
+                            "seed": 123                  # 确保结果可重现
+                        }
+                    )
+                    ```
+        """
+
         if stream:
             return self.run_and_stream(
                 agent=agent,
@@ -264,6 +427,7 @@ class Swarm:
                 model_override=model_override,
                 stream=stream,
                 debug=debug,
+                extra_completion_params=extra_completion_params,
             )
             message = completion.choices[0].message
             debug_print(debug, "Received completion:", message)
